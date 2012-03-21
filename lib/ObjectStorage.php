@@ -10,17 +10,33 @@
  * @author dsemenihin
  */
 abstract class ObjectStorage {
+    /**
+     * @var array
+     */
+    static protected $_factoryCache = array();
+
+    /**
+     * @static
+     * @param $storageName
+     * @return ObjectStorage
+     * @throws Exception
+     */
     static public function create($storageName) {
-        if (!isset(Config::$vars[$storageName]['adapter']) 
+        if (!isset(self::$_factoryCache[$storageName])) {
+            if (!isset(Config::$vars[$storageName]['adapter'])
                 || !isset(Config::$vars[$storageName]['connectParams'])) {
-            throw new Exception('Неизвестное хранилище объектов');
+                throw new Exception('Неизвестное хранилище объектов');
+            }
+
+            if (!class_exists(Config::$vars[$storageName]['adapter'])) {
+                throw new Exception('Нет класса хранилища');
+            }
+
+            self::$_factoryCache[$storageName] =
+                new Config::$vars[$storageName]['adapter'](Config::$vars[$storageName]['connectParams']);
         }
-        
-        if (!class_exists(Config::$vars[$storageName]['adapter'])) {
-            throw new Exception('Нет класса хранилища');
-        }
-        
-        return new Config::$vars[$storageName]['adapter'](Config::$vars[$storageName]['connectParams']);
+
+        return self::$_factoryCache[$storageName];
     }
     
     protected function __construct($params) {
