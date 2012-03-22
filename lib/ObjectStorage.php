@@ -48,7 +48,7 @@ abstract class ObjectStorage {
     
     abstract public function loadObject($collectionName, $id);
     
-    abstract public function saveObject($collectionName, $object);
+    abstract public function saveObject($object);
         
     
 }

@@ -29,8 +29,23 @@ class MysqlStorage extends ObjectStorage {
     
     public function loadObject($collectionName, $id) {
         if ($this->_hasCollection($collectionName)) {
-            //TODO
-            $result = $this->_dbh->query('select * from '.$collectionName.' where oid = '.$id, PDO::FETCH_NUM);
+            try {
+                $sql = $this->_dbh->prepare('select * from '.$collectionName.' where oid = :id');
+                $sql->bindValue(':id', $id, PDO::PARAM_INT);
+                $sql->execute();
+                if ($sql->errorCode() !== PDO::ERR_NONE) {
+                    throw new Exception('Mysql error: '.$sql->errorInfo());
+                }
+                $result = $sql->fetchObject();
+                if (empty($result)) {
+                    throw new Exception('Нет объекта : '.$collectionName.' с oid = '.$id);
+                }
+                
+               return (array) $result;
+                
+            } catch (PDOException $e) {
+                throw new Exception('PDO error: '.$e->getMessage());
+            }
         } else {
             throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
         }
@@ -38,7 +53,6 @@ class MysqlStorage extends ObjectStorage {
     
     protected function _hasCollection($collectionName) {
         $sql = 'show tables';
-        $collectionName = strtolower($collectionName);
         foreach ($this->_dbh->query($sql, PDO::FETCH_NUM) as $table) {
             if ($collectionName == $table[0]) {
                 return true;
@@ -47,8 +61,12 @@ class MysqlStorage extends ObjectStorage {
         return false;
     }
     
-    public function saveObject($collectionName, $object) {
-        ;
+    public function saveObject($object) {
+        if (!$object instanceof BasicObject) {
+            throw new Exception('Не тот объект');
+        }
+        
+        var_dump('save', get_class($object), $object->getObjectFields());
     }
 }
 

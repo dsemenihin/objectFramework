@@ -13,4 +13,5 @@ function __autoload($className) {
     }
 }
 
-UserObject::create(1);
+$user = UserObject::create(1);
+var_dump($user->setTitle('group2'));
