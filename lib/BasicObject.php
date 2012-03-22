@@ -30,8 +30,13 @@ abstract class BasicObject {
         return $object;
     }
     
+    /**
+     *
+     * @param type $id
+     * @param ObjectStorage $storage 
+     */
     protected function __construct($id, $storage) {
-        var_dump(get_called_class(), $storage);
+        $object = $storage->loadObject(get_called_class(), $id);
     }
     
 }

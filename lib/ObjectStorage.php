@@ -23,9 +23,12 @@ abstract class ObjectStorage {
      */
     static public function create($storageName) {
         if (!isset(self::$_factoryCache[$storageName])) {
-            if (!isset(Config::$vars[$storageName]['adapter'])
-                || !isset(Config::$vars[$storageName]['connectParams'])) {
-                throw new Exception('Неизвестное хранилище объектов');
+            if (!isset(Config::$vars[$storageName]['adapter'])) {
+                throw new Exception('Неизвестное хранилище объектов '. $storageName);
+            }
+            
+            if (!isset(Config::$vars[$storageName]['connectParams'])) {
+                throw new Exception('Нет данных подключения к хранилищу '. $storageName);
             }
 
             if (!class_exists(Config::$vars[$storageName]['adapter'])) {
@@ -42,6 +45,11 @@ abstract class ObjectStorage {
     protected function __construct($params) {
         $this->_connect($params);
     }
+    
+    abstract public function loadObject($collectionName, $id);
+    
+    abstract public function saveObject($collectionName, $object);
+        
     
 }
 

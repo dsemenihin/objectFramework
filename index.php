@@ -14,4 +14,3 @@ function __autoload($className) {
 }
 
 UserObject::create(1);
-AdminObject::create(1, ObjectStorage::create('MysqlDb2'));
