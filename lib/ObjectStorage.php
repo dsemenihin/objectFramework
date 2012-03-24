@@ -14,6 +14,10 @@ abstract class ObjectStorage {
      * @var array
      */
     static protected $_factoryCache = array();
+    
+    protected 
+        $_objectSchema = array(),
+        $_saveObjectData = array();
 
     /**
      * @static
@@ -42,13 +46,43 @@ abstract class ObjectStorage {
         return self::$_factoryCache[$storageName];
     }
     
+    /**
+     * Генерирование уникального ID для нового объекта
+     * @return bigint
+     */
+    public static function genId() {
+        list($usec, $sec) = explode(" ", microtime());
+        $start = date('U', strtotime('2000-01-01 00:00:00'));
+        $p = rand(1, 1000);
+        $sec = $sec - $start;
+        $sec = bcadd($sec, $usec, 5);
+        $sec = bcmul($sec, 100000, 0);
+        $sec = bcmul($sec, 100000, 0);
+        $pp = bcadd($sec, $p, 0);
+        return $pp;
+    }
+    
     protected function __construct($params) {
         $this->_connect($params);
     }
     
+    public function __destruct() {
+        $this->_saveObjectData();
+    }
+    
+    public function saveObject($object) {
+        if (!$object instanceof BasicObject) {
+            throw new Exception('Не тот объект');
+        }
+        $this->_saveObjectData[get_class($object)][$object->getOid()] = $object->getObjectFields();
+    }
+
+
     abstract public function loadObject($collectionName, $id);
     
-    abstract public function saveObject($object);
+    abstract public function getObjectSchema($collectionName);
+    
+    abstract protected function _saveObjectData();
         
     
 }

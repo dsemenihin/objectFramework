@@ -28,10 +28,20 @@ abstract class BasicObject {
         if (is_null($storage)) {
             $storage = ObjectStorage::create(Config::$vars['defaultStorage']);
         } else if (!$storage instanceof ObjectStorage) {
-            throw new Exception('Неверное хранилище');
+            throw new Exception('Неизвестное хранилище');
         }
         
-        eval('$object = new '.get_called_class().'($id, $storage);');
+        $objectClass = get_called_class();
+        $objectData = !is_null($id) ? $storage->loadObject($objectClass, $id) : array();
+        $object = new $objectClass($objectData, $storage);
+        
+        if (is_null($id)) {
+            foreach ($storage->getObjectSchema($objectClass) as $field => $data) {
+                $object->{'set'.$field}($data['Default']);
+            }
+            $object->setOid(ObjectStorage::genId());
+        }
+        
         return $object;
     }
     
@@ -40,9 +50,9 @@ abstract class BasicObject {
      * @param type $id
      * @param ObjectStorage $storage 
      */
-    protected function __construct($id, $storage) {
-        $objectData = $storage->loadObject(get_called_class(), $id);
+    protected function __construct($objectData, $storage) {
         foreach ($objectData as $key => $value) {
+            $key = str_replace('_', '', $key);
             $this->_objectFields[$key] = $value;
         }
         
@@ -73,7 +83,8 @@ abstract class BasicObject {
         if (preg_match("|^set(.*)$|", $method, $poc)) {  
             if (count($params) == 1) {
                 $key = mb_strtolower($poc[1]);
-                if (isset($this->_objectFields[$key]) && $this->_objectFields[$key] != $params[0]) {
+                if (!isset($this->_objectFields[$key]) || 
+                    (isset($this->_objectFields[$key]) && $this->_objectFields[$key] != $params[0])) {
                     $this->_modifyFields[$key] = true;
                 }
                 $this->_objectFields[$key] = $params[0];

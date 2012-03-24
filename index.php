@@ -13,5 +13,11 @@ function __autoload($className) {
     }
 }
 
-$user = UserObject::create(1);
-var_dump($user->setTitle('group2'));
+$user2 = UserObject::create();
+$user2->setUserType('Admin');
+$user2->setTitle('test');
+
+$campaign = CampaignObject::create();
+$campaign->setUserOid($user2->getOid());
+$campaign->setName('campaign1');
+

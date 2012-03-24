@@ -61,12 +61,67 @@ class MysqlStorage extends ObjectStorage {
         return false;
     }
     
-    public function saveObject($object) {
-        if (!$object instanceof BasicObject) {
-            throw new Exception('Не тот объект');
+    public function _saveObjectData() {
+        foreach ($this->_saveObjectData as $collectionName => $objects) {
+            if ($this->_hasCollection($collectionName)) {
+                $sqlFields = array();
+                $sqlUpdate = array();
+
+                foreach ($this->getObjectSchema($collectionName) as $field => $fieldData) {
+                    $sqlFields[] = '`'.$field.'`';
+                    $sqlUpdate[] = '`'.$field.'`=values(`'.$field.'`)';
+                }
+
+                $sqlInsert = array();
+                foreach ($objects as $oid => $data) {
+                    $insertValue = array();
+                    foreach ($this->getObjectSchema($collectionName) as $field => $fieldData) {
+                        $field = str_replace('_', '', $field);
+                        $value = isset($data[$field]) ? $data[$field] : $fieldData['Default'];
+                        if (!is_null($value)) {
+                            $value = '"'.$value.'"';
+                        } else {
+                            $value = 'NULL';
+                        }
+                        $insertValue[] = $value;
+                    }
+
+                    $sqlInsert[] = '('.implode(',', $insertValue).')';
+
+                }
+
+                $sql = '
+                    insert into '.$collectionName.' ('.implode(',', $sqlFields).') values ';
+                $sql .= implode(',', $sqlInsert);
+                $sql .= ' ON DUPLICATE KEY UPDATE';
+                $sql .= implode(',', $sqlUpdate);
+
+                try {
+                    $result = $this->_dbh->exec($sql); 
+                } catch (PDOException $e) {
+                    throw new Exception('PDO error: '.$e->getMessage());
+                }
+                
+                if ($this->_dbh->errorCode() !== PDO::ERR_NONE) {
+                    $info = $this->_dbh->errorInfo();
+                    throw new Exception('Mysql error: '.$info[2]);
+                }
+            } else {
+                throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
+            }
+        }
+    }
+    
+    public function getObjectSchema($collectionName) {
+        if (!isset($this->_objectSchema[$collectionName])) {
+            $sql = 'desc '.$collectionName;
+            $this->_objectSchema[$collectionName] = array();
+            foreach ($this->_dbh->query($sql, PDO::FETCH_ASSOC) as $field) {
+                $this->_objectSchema[$collectionName][$field['Field']] = $field;
+            }
         }
         
-        var_dump('save', get_class($object), $object->getObjectFields());
+        return $this->_objectSchema[$collectionName];
     }
 }
 
