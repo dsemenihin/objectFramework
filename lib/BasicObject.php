@@ -1,10 +1,5 @@
 <?php
 
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
-
 /**
  * Description of Basic
  *
@@ -15,31 +10,29 @@ abstract class BasicObject {
     protected 
         $_objectFields = array(),
         $_storage,
+        $_primaryKeyName,
         $_modifyFields = array();
-
+    
     /**
      * @static
      * @param $id
-     * @param null $storage
+     * @param ObjectStorage $storage
      * @return BasicObject
      * @throws Exception
      */
-    static public function create($id = null, $storage = null) {
+    static public function create($id = null, ObjectStorage $storage = null) {
         if (is_null($storage)) {
             $storage = ObjectStorage::create(Config::$vars['defaultStorage']);
-        } else if (!$storage instanceof ObjectStorage) {
-            throw new Exception('Неизвестное хранилище');
-        }
+        } 
         
         $objectClass = get_called_class();
         $objectData = !is_null($id) ? $storage->loadObject($objectClass, $id) : array();
         $object = new $objectClass($objectData, $storage);
         
         if (is_null($id)) {
-            foreach ($storage->getObjectSchema($objectClass) as $field => $data) {
-                $object->{'set'.$field}($data['Default']);
+            foreach ($storage->initObject($objectClass) as $field => $value) {
+                $object->{'set'.$field}($value);
             }
-            $object->setOid(ObjectStorage::genId());
         }
         
         return $object;
@@ -72,17 +65,23 @@ abstract class BasicObject {
      * @param type $params 
      */
     public function __call($method, $params) {
+        $method = mb_strtolower($method);
+        if ($method == 'getid') {
+            $storageClass = get_class($this->_storage);
+            return $this->_objectFields[$storageClass::getPrimaryKeyName()];
+        }
+        
         $poc = array();
         if (preg_match("|^get(.*)$|", $method, $poc)) {  
-            $key = mb_strtolower($poc[1]);
+            $key = $poc[1];
             if (isset($this->_objectFields[$key])) {
                 return $this->_objectFields[$key];
             }
         }
         
         if (preg_match("|^set(.*)$|", $method, $poc)) {  
+            $key = $poc[1];
             if (count($params) == 1) {
-                $key = mb_strtolower($poc[1]);
                 if (!isset($this->_objectFields[$key]) || 
                     (isset($this->_objectFields[$key]) && $this->_objectFields[$key] != $params[0])) {
                     $this->_modifyFields[$key] = true;

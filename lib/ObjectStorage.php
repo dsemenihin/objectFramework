@@ -10,10 +10,10 @@
  * @author dsemenihin
  */
 abstract class ObjectStorage {
-    /**
-     * @var array
-     */
-    static protected $_factoryCache = array();
+    
+    static protected 
+        $_primaryKeyName = 'oid',
+        $_storageCache = array();
     
     protected 
         $_objectSchema = array(),
@@ -26,7 +26,7 @@ abstract class ObjectStorage {
      * @throws Exception
      */
     static public function create($storageName) {
-        if (!isset(self::$_factoryCache[$storageName])) {
+        if (!isset(self::$_storageCache[$storageName])) {
             if (!isset(Config::$vars[$storageName]['adapter'])) {
                 throw new Exception('Неизвестное хранилище объектов '. $storageName);
             }
@@ -39,13 +39,19 @@ abstract class ObjectStorage {
                 throw new Exception('Нет класса хранилища');
             }
 
-            self::$_factoryCache[$storageName] =
+            self::$_storageCache[$storageName] =
                 new Config::$vars[$storageName]['adapter'](Config::$vars[$storageName]['connectParams']);
         }
 
-        return self::$_factoryCache[$storageName];
+        return self::$_storageCache[$storageName];
     }
     
+    
+    static public function getPrimaryKeyName() {
+        return self::$_primaryKeyName;
+    }
+
+
     /**
      * Генерирование уникального ID для нового объекта
      * @return bigint
@@ -70,17 +76,21 @@ abstract class ObjectStorage {
         $this->_saveObjectData();
     }
     
-    public function saveObject($object) {
-        if (!$object instanceof BasicObject) {
-            throw new Exception('Не тот объект');
-        }
-        $this->_saveObjectData[get_class($object)][$object->getOid()] = $object->getObjectFields();
+    /**
+     *
+     * @param BasicObject $object
+     * @throws Exception 
+     */
+    public function saveObject(BasicObject $object) {
+        $storageClass = get_called_class();
+        $this->_saveObjectData[get_class($object)][$object->{'get'.$storageClass::$_primaryKeyName}()] = 
+            $object->getObjectFields();
     }
 
 
     abstract public function loadObject($collectionName, $id);
     
-    abstract public function getObjectSchema($collectionName);
+    abstract public function initObject($collectionName);
     
     abstract protected function _saveObjectData();
         

@@ -30,7 +30,10 @@ class MysqlStorage extends ObjectStorage {
     public function loadObject($collectionName, $id) {
         if ($this->_hasCollection($collectionName)) {
             try {
-                $sql = $this->_dbh->prepare('select * from '.$collectionName.' where oid = :id');
+                $sql = $this->_dbh->prepare('
+                    select * from '.$collectionName.' 
+                    where '.self::$_primaryKeyName.' = :id
+                ');
                 $sql->bindValue(':id', $id, PDO::PARAM_INT);
                 $sql->execute();
                 if ($sql->errorCode() !== PDO::ERR_NONE) {
@@ -38,7 +41,7 @@ class MysqlStorage extends ObjectStorage {
                 }
                 $result = $sql->fetchObject();
                 if (empty($result)) {
-                    throw new Exception('Нет объекта : '.$collectionName.' с oid = '.$id);
+                    throw new Exception('Нет объекта : '.$collectionName.' с '.self::$_primaryKeyName.' = '.$id);
                 }
                 
                return (array) $result;
@@ -62,57 +65,64 @@ class MysqlStorage extends ObjectStorage {
     }
     
     public function _saveObjectData() {
-        foreach ($this->_saveObjectData as $collectionName => $objects) {
-            if ($this->_hasCollection($collectionName)) {
-                $sqlFields = array();
-                $sqlUpdate = array();
+        $this->_dbh->beginTransaction();
+        try {
+            foreach ($this->_saveObjectData as $collectionName => $objects) {
+                if ($this->_hasCollection($collectionName)) {
+                    $sqlFields = array();
+                    $sqlUpdate = array();
 
-                foreach ($this->getObjectSchema($collectionName) as $field => $fieldData) {
-                    $sqlFields[] = '`'.$field.'`';
-                    $sqlUpdate[] = '`'.$field.'`=values(`'.$field.'`)';
-                }
-
-                $sqlInsert = array();
-                foreach ($objects as $oid => $data) {
-                    $insertValue = array();
-                    foreach ($this->getObjectSchema($collectionName) as $field => $fieldData) {
-                        $field = str_replace('_', '', $field);
-                        $value = isset($data[$field]) ? $data[$field] : $fieldData['Default'];
-                        if (!is_null($value)) {
-                            $value = '"'.$value.'"';
-                        } else {
-                            $value = 'NULL';
-                        }
-                        $insertValue[] = $value;
+                    foreach ($this->_getObjectSchema($collectionName) as $field => $fieldData) {
+                        $sqlFields[] = '`'.$field.'`';
+                        $sqlUpdate[] = '`'.$field.'`=values(`'.$field.'`)';
                     }
 
-                    $sqlInsert[] = '('.implode(',', $insertValue).')';
+                    $sqlInsert = array();
+                    foreach ($objects as $oid => $data) {
+                        $insertValue = array();
+                        foreach ($this->_getObjectSchema($collectionName) as $field => $fieldData) {
+                            $field = str_replace('_', '', $field);
+                            $value = isset($data[$field]) ? $data[$field] : $fieldData['Default'];
+                            if (!is_null($value)) {
+                                $value = '"'.$value.'"';
+                            } else {
+                                $value = 'NULL';
+                            }
+                            $insertValue[] = $value;
+                        }
 
-                }
+                        $sqlInsert[] = '('.implode(',', $insertValue).')';
 
-                $sql = '
-                    insert into '.$collectionName.' ('.implode(',', $sqlFields).') values ';
-                $sql .= implode(',', $sqlInsert);
-                $sql .= ' ON DUPLICATE KEY UPDATE';
-                $sql .= implode(',', $sqlUpdate);
+                    }
 
-                try {
-                    $result = $this->_dbh->exec($sql); 
-                } catch (PDOException $e) {
-                    throw new Exception('PDO error: '.$e->getMessage());
+                    $sql = '
+                        insert into '.$collectionName.' ('.implode(',', $sqlFields).') values ';
+                    $sql .= implode(',', $sqlInsert);
+                    $sql .= ' ON DUPLICATE KEY UPDATE';
+                    $sql .= implode(',', $sqlUpdate);
+
+                    try {
+                        $result = $this->_dbh->exec($sql); 
+                    } catch (PDOException $e) {
+                        throw new Exception('PDO error: '.$e->getMessage());
+                    }
+
+                    if ($this->_dbh->errorCode() !== PDO::ERR_NONE) {
+                        $info = $this->_dbh->errorInfo();
+                        throw new Exception('Mysql error: '.$info[2]);
+                    }
+                } else {
+                    throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
                 }
-                
-                if ($this->_dbh->errorCode() !== PDO::ERR_NONE) {
-                    $info = $this->_dbh->errorInfo();
-                    throw new Exception('Mysql error: '.$info[2]);
-                }
-            } else {
-                throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
             }
+            $this->_dbh->commit();
+        } catch (Exception $e) {
+            $this->_dbh->rollback();
+            throw $e;
         }
     }
     
-    public function getObjectSchema($collectionName) {
+    protected function _getObjectSchema($collectionName) {
         if (!isset($this->_objectSchema[$collectionName])) {
             $sql = 'desc '.$collectionName;
             $this->_objectSchema[$collectionName] = array();
@@ -122,6 +132,17 @@ class MysqlStorage extends ObjectStorage {
         }
         
         return $this->_objectSchema[$collectionName];
+    }
+    
+    public function initObject($collectionName) {
+        $initData = array();
+        foreach ($this->_getObjectSchema($collectionName) as $field => $data) {
+            $initData[$field] = $data['Default'];
+        }
+
+        $initData[self::$_primaryKeyName] = self::genId();
+
+        return $initData;
     }
 }
 
