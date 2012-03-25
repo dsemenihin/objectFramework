@@ -27,15 +27,22 @@ abstract class BasicObject {
         
         $objectClass = get_called_class();
         $objectData = !is_null($id) ? $storage->loadObject($objectClass, $id) : array();
-        $object = new $objectClass($objectData, $storage);
         
-        if (is_null($id)) {
-            foreach ($storage->initObject($objectClass) as $field => $value) {
-                $object->{'set'.$field}($value);
+        if (is_array($id)) {
+            $result = array();
+            foreach ($objectData as $objectItem) {
+                $result[] = new $objectClass($objectItem, $storage);
             }
+            return $result;
+        } else {
+            $object = new $objectClass(isset($objectData[0]) ? $objectData[0] : array(), $storage);
+            if (is_null($id)) {
+                foreach ($storage->initObject($objectClass) as $field => $value) {
+                    $object->{'set'.$field}($value);
+                }
+            }
+            return $object;
         }
-        
-        return $object;
     }
     
     /**
@@ -44,34 +51,49 @@ abstract class BasicObject {
      * @param ObjectStorage $storage 
      */
     protected function __construct($objectData, $storage) {
-        foreach ($objectData as $key => $value) {
-            $key = str_replace('_', '', $key);
-            $this->_objectFields[$key] = $value;
-        }
-        
+        $this->setFields($objectData);
         $this->_storage = $storage;
     }
     
+    /**
+     * 
+     */
     public function __destruct() {
         if (count($this->_modifyFields)) {
             $this->_storage->saveObject($this);
         }
     }
-
+    
+    /**
+     *
+     * @param array $objectData 
+     */
+    public function setFields($objectData) {
+        foreach ($objectData as $key => $value) {
+            $key = str_replace('_', '', $key);
+            $this->_objectFields[$key] = $value;
+        }
+    }
 
     /**
      *
-     * @param type $method
-     * @param type $params 
+     * @param string $method
+     * @param array $params 
      */
     public function __call($method, $params) {
+        $poc = array();
+        if (preg_match("|^get(.*)ObjectList$|", $method, $poc)) {
+            $listClass = $poc[1].'ObjectList';
+            return new $listClass($this->_storage, $poc[1].'Object', 
+                !empty($params[0]) ? $params[0] : array(), $this); 
+        }
+        
         $method = mb_strtolower($method);
         if ($method == 'getid') {
             $storageClass = get_class($this->_storage);
             return $this->_objectFields[$storageClass::getPrimaryKeyName()];
         }
         
-        $poc = array();
         if (preg_match("|^get(.*)$|", $method, $poc)) {  
             $key = $poc[1];
             if (isset($this->_objectFields[$key])) {

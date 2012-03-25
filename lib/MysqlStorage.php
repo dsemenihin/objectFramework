@@ -30,21 +30,24 @@ class MysqlStorage extends ObjectStorage {
     public function loadObject($collectionName, $id) {
         if ($this->_hasCollection($collectionName)) {
             try {
+                if (!is_array($id)) {
+                    $id = array($id);
+                }
                 $sql = $this->_dbh->prepare('
-                    select * from '.$collectionName.' 
-                    where '.self::$_primaryKeyName.' = :id
+                    select * from `'.$collectionName.'` 
+                    where '.self::$_primaryKeyName.' in ('.implode(',', $id).')
                 ');
-                $sql->bindValue(':id', $id, PDO::PARAM_INT);
                 $sql->execute();
                 if ($sql->errorCode() !== PDO::ERR_NONE) {
-                    throw new Exception('Mysql error: '.$sql->errorInfo());
+                    $info = $this->_dbh->errorInfo();
+                    throw new Exception('Mysql error: '.$info[2]);
                 }
-                $result = $sql->fetchObject();
+                $result = $sql->fetchAll(PDO::FETCH_OBJ);
                 if (empty($result)) {
                     throw new Exception('Нет объекта : '.$collectionName.' с '.self::$_primaryKeyName.' = '.$id);
                 }
                 
-               return (array) $result;
+               return $result;
                 
             } catch (PDOException $e) {
                 throw new Exception('PDO error: '.$e->getMessage());
@@ -82,10 +85,10 @@ class MysqlStorage extends ObjectStorage {
                         $insertValue = array();
                         foreach ($this->_getObjectSchema($collectionName) as $field => $fieldData) {
                             $field = str_replace('_', '', $field);
-                            $value = isset($data[$field]) ? $data[$field] : $fieldData['Default'];
-                            if (!is_null($value)) {
-                                $value = '"'.$value.'"';
-                            } else {
+                            $value = isset($data[$field]) 
+                                ? '"'.$data[$field].'"' 
+                                : $fieldData['Default'];
+                            if (is_null($value)) {
                                 $value = 'NULL';
                             }
                             $insertValue[] = $value;
@@ -96,11 +99,11 @@ class MysqlStorage extends ObjectStorage {
                     }
 
                     $sql = '
-                        insert into '.$collectionName.' ('.implode(',', $sqlFields).') values ';
+                        insert into `'.$collectionName.'` ('.implode(',', $sqlFields).') values ';
                     $sql .= implode(',', $sqlInsert);
                     $sql .= ' ON DUPLICATE KEY UPDATE';
                     $sql .= implode(',', $sqlUpdate);
-
+var_dump($sql);
                     try {
                         $result = $this->_dbh->exec($sql); 
                     } catch (PDOException $e) {
@@ -143,6 +146,45 @@ class MysqlStorage extends ObjectStorage {
         $initData[self::$_primaryKeyName] = self::genId();
 
         return $initData;
+    }
+    
+    public function getIdsByCriteria($collectionName, array $criteria) {
+        if ($this->_hasCollection($collectionName)) {
+            try {
+                if (!empty($criteria)) {
+                    $where = array();
+                    $schema = $this->_getObjectSchema($collectionName);
+                    foreach ($criteria as $field => $value) {
+                        if (!isset($schema[$field])) {
+                            continue;
+                        }
+                        $where[] = '`'.$field.'`="'.$value.'"';
+                    }
+                    
+                    $where = implode(' AND ', $where);
+                } else {
+                    $where = '1';
+                }
+                
+                $sql = '
+                    select `'.self::$_primaryKeyName.'` from `'.$collectionName.'` 
+                    where ' . $where;
+                
+                $data = $this->_dbh->query($sql);
+                if ($this->_dbh->errorCode() !== PDO::ERR_NONE) {
+                    $info = $this->_dbh->errorInfo();
+                    throw new Exception('Mysql error: '.$info[2]);
+                }
+                $result = $data->fetchAll(PDO::FETCH_COLUMN, 0);
+                
+               return $result;
+                
+            } catch (PDOException $e) {
+                throw new Exception('PDO error: '.$e->getMessage());
+            }
+        } else {
+            throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
+        }
     }
 }
 

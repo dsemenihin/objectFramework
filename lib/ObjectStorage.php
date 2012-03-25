@@ -92,6 +92,13 @@ abstract class ObjectStorage {
     
     abstract public function initObject($collectionName);
     
+    /**
+     * Вернуть список id объектов по заданному условию
+     * @param type $collectionName
+     * @param array $criteria 
+     */
+    abstract public function getIdsByCriteria($collectionName, array $criteria);
+    
     abstract protected function _saveObjectData();
         
     
