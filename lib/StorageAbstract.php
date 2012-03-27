@@ -39,14 +39,15 @@ abstract class StorageAbstract {
                 : false;
 
             self::$_storageCache[$storageName] =
-                new $storageConfig['adapter']($storageConfig['connectParams'], $debug);
+                new $storageConfig['adapter']($storageName, $storageConfig['connectParams'], $debug);
         }
 
         return self::$_storageCache[$storageName];
     }
     
-    protected function __construct($params, $debug = false) {
+    protected function __construct($storageName, $params, $debug = false) {
         $this->_debugMode = (bool) $debug;
+        $this->_storageName = $storageName;
         $this->_connect($params);
     }
     

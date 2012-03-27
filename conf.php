@@ -3,7 +3,7 @@
 class Config {
     static $vars = array(
         'defaultStorage' => 'MysqlDb1',
-        'defaultCache'   => 'Memcache',
+        
         'storages' => array(
             'MysqlDb1'   => array (
                 'adapter'       => 'MysqlStorage',
@@ -12,9 +12,11 @@ class Config {
                     'port'     => '3360',
                     'user'     => 'root',
                     'password' => '',
-                    'database' => 'test'
+                    'database' => 'test2',
+                    'charset'  => 'utf8',
                 ),
-                'debug'         => true
+                'debug'         => true,
+                'cache'   => 'Memcache',
             ),
             'Memcache' => array(
                 'adapter'       => 'MemcacheCache',

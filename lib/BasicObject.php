@@ -10,7 +10,6 @@ abstract class BasicObject {
     protected 
         $_objectFields = array(),
         $_storage,
-        $_cache,
         $_primaryKeyName,
         $_modifyFields = array();
     
@@ -22,11 +21,7 @@ abstract class BasicObject {
      * @return BasicObject
      * @throws Exception
      */
-    static public function create($id = null, ObjectStorage $storage = null, ObjectCache $cache = null) {
-        if (is_null($cache)) {
-            $cache = ObjectCache::create(Config::$vars['defaultCache']);
-        } 
-        
+    static public function create($id = null, ObjectStorage $storage = null) {
         if (is_null($storage)) {
             $storage = ObjectStorage::create(Config::$vars['defaultStorage']);
         } 
@@ -37,12 +32,12 @@ abstract class BasicObject {
             $objectData = $storage->loadObjectsById($objectClass, $id);
             $result = array();
             foreach ($objectData as $objectItem) {
-                $result[] = new $objectClass($objectItem, $storage, $cache);
+                $result[] = new $objectClass($objectItem, $storage);
             }
             return $result;
         } else {
             $objectData = !is_null($id) ? $storage->loadObjectsById($objectClass, array($id)) : array();
-            $object = new $objectClass(isset($objectData[0]) ? $objectData[0] : array(), $storage, $cache);
+            $object = new $objectClass(isset($objectData[0]) ? $objectData[0] : array(), $storage);
             if (is_null($id)) {
                 foreach ($storage->initObject($objectClass) as $field => $value) {
                     $object->{'set'.$field}($value);
@@ -57,9 +52,8 @@ abstract class BasicObject {
      * @param type $id
      * @param ObjectStorage $storage 
      */
-    protected function __construct($objectData, ObjectStorage $storage = null, ObjectCache $cache) {
+    protected function __construct($objectData, ObjectStorage $storage = null) {
         $this->setFields($objectData);
-        $this->_cache = $cache;
         $this->_storage = $storage;
     }
     

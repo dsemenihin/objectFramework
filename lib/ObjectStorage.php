@@ -17,12 +17,23 @@ abstract class ObjectStorage extends StorageAbstract {
     protected 
         $_objectSchema = array(),
         $_saveObjectData = array(),
+        $_storageName,
+        /**
+         * @var ObjectCache 
+         */
+        $_cache,
         $_debugMode = false;
 
     static public function getPrimaryKeyName() {
         return self::$_primaryKeyName;
     }
-
+    
+    protected function __construct($storageName, $params, $debug = false) {
+        parent::__construct($storageName, $params, $debug);
+        if (!empty(Config::$vars['storages'][$storageName]['cache'])) {
+            $this->_cache = ObjectCache::create(Config::$vars['storages'][$storageName]['cache'], $debug);
+        }
+    }
 
     /**
      * Генерирование уникального ID для нового объекта
@@ -42,13 +53,30 @@ abstract class ObjectStorage extends StorageAbstract {
     
     public function __destruct() {
         $this->_saveObjectData();
+        $this->_saveToCache();
         if ($this->_debugMode) {
             var_dump($this->_getDebugInfo());
         }
     }
     
     /**
-     *
+     * Сохрание в кеш измененных объектов
+     * @return boolean 
+     */
+    protected function _saveToCache() {
+        if (!$this->_cache || empty($this->_saveObjectData)) {
+            return false;
+        }
+        
+        foreach ($this->_saveObjectData as $collectionName => $objects) {
+            foreach ($objects as $oid => $data) {
+                $this->_cache->val($this->_getCacheKey($collectionName, $oid), $data);
+            }
+        }
+    }
+
+    /**
+     * Накопление данных для сохранения объектов
      * @param BasicObject $object
      * @throws Exception 
      */
@@ -57,10 +85,51 @@ abstract class ObjectStorage extends StorageAbstract {
         $this->_saveObjectData[get_class($object)][$object->{'get'.$storageClass::$_primaryKeyName}()] = 
             $object->getObjectFields();
     }
-
-
-    abstract public function loadObjectsById($collectionName, array $id);
     
+    protected function _getCacheKey($collectionName, $id) {
+        if (!$this->_cache) {
+            return false;
+        }
+        return $this->_cache->hash(array($collectionName, $id));
+    }
+    
+    /**
+     * Загрузка данных объектов.
+     * Если есть данные в кеше, берем из него, иначе подгружаем из постоянного хранилища.
+     * @param type $collectionName
+     * @param array $id
+     * @return type 
+     */
+    public function loadObjectsById($collectionName, array $id) {
+        $cacheResult   = array();
+        if ($this->_cache) {
+            foreach ($id as $idItem) {
+                $cacheItem = $this->_cache->val($this->_getCacheKey($collectionName, $idItem));
+                if ($cacheItem) {
+                    $cacheResult[$idItem] = $cacheItem;
+                }
+            }
+        }
+        
+        $notFound = array_diff($id, array_keys($cacheResult));
+        $storageResult = !empty($notFound) ? $this->_loadObjectsById($collectionName, $notFound) : array();
+        
+        foreach ($storageResult as $object) {
+            $this->_cache->val($this->_getCacheKey($collectionName, $object[self::$_primaryKeyName]), $object);
+        }
+        
+        return array_merge(array_values($cacheResult), $storageResult);
+    }
+
+    /**
+     * Загрузка данных объектов по первичному ключу 
+     */
+    abstract protected function _loadObjectsById($collectionName, array $id);
+    
+    /**
+     * Инициализация объекта из схемы.
+     * Значения заполняются дефолтными 
+     */
     abstract public function initObject($collectionName);
     
     /**
@@ -70,6 +139,10 @@ abstract class ObjectStorage extends StorageAbstract {
      */
     abstract public function getIdsByCriteria($collectionName, array $criteria);
     
+    /**
+     * Реализация сохранения данных объектов.
+     * Вызывается из деструктора хранилища 
+     */
     abstract protected function _saveObjectData();
     
     /**

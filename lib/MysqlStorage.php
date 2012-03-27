@@ -29,9 +29,13 @@ class MysqlStorage extends ObjectStorage {
         if ($this->_debugMode) {
             $this->_dbh->exec('set profiling=1');
         }
+        
+        if (isset($params['charset'])) {
+            $this->_dbh->exec('set names "'.$params['charset'].'";');
+        }
     }
     
-    public function loadObjectsById($collectionName, array $id) {
+    protected function _loadObjectsById($collectionName, array $id) {
         if ($this->_hasCollection($collectionName)) {
             try {
                 $sql = $this->_dbh->prepare('
@@ -43,7 +47,7 @@ class MysqlStorage extends ObjectStorage {
                     $info = $this->_dbh->errorInfo();
                     throw new Exception('Mysql error: '.$info[2]);
                 }
-                $result = $sql->fetchAll(PDO::FETCH_OBJ);
+                $result = $sql->fetchAll(PDO::FETCH_ASSOC);
                 if (empty($result)) {
                     throw new Exception('Нет объекта : '.$collectionName.' с '.self::$_primaryKeyName.' = '.$id);
                 }
@@ -59,13 +63,25 @@ class MysqlStorage extends ObjectStorage {
     }
     
     protected function _hasCollection($collectionName) {
+        $cacheKey = get_class().$collectionName.'showtables';
+        if ($this->_cache && $cacheHas = $this->_cache->val($cacheKey)) {
+            return $cacheHas;
+        }
+        
         $sql = 'show tables';
+        $result = false;
         foreach ($this->_dbh->query($sql, PDO::FETCH_NUM) as $table) {
             if ($collectionName == $table[0]) {
-                return true;
+                $result = true;
+                break;
             }
         }
-        return false;
+        
+        if ($this->_cache) {
+            $this->_cache->val($cacheKey, $result);
+        }
+        
+        return $result;
     }
     
     public function _saveObjectData() {
@@ -91,10 +107,8 @@ class MysqlStorage extends ObjectStorage {
                             $field = str_replace('_', '', $field);
                             $value = isset($data[$field]) 
                                 ? '"'.$data[$field].'"' 
-                                : $fieldData['Default'];
-                            if (is_null($value)) {
-                                $value = 'NULL';
-                            }
+                                : (is_null($fieldData['Default']) ? 'NULL' : '"'.$fieldData['Default'].'"');
+                            
                             $insertValue[] = $value;
                         }
 
@@ -130,12 +144,20 @@ class MysqlStorage extends ObjectStorage {
     }
     
     protected function _getObjectSchema($collectionName) {
+        $cacheKey = get_class().$collectionName.'schema';
+        if ($this->_cache && $cacheSchema = $this->_cache->val($cacheKey)) {
+            return $cacheSchema;
+        }
         if (!isset($this->_objectSchema[$collectionName])) {
             $sql = 'desc '.$collectionName;
             $this->_objectSchema[$collectionName] = array();
             foreach ($this->_dbh->query($sql, PDO::FETCH_ASSOC) as $field) {
                 $this->_objectSchema[$collectionName][$field['Field']] = $field;
             }
+        }
+        
+        if ($this->_cache) {
+            $this->_cache->val($cacheKey, $this->_objectSchema[$collectionName]);
         }
         
         return $this->_objectSchema[$collectionName];
