@@ -9,44 +9,16 @@
  *
  * @author dsemenihin
  */
-abstract class ObjectStorage {
+abstract class ObjectStorage extends StorageAbstract {
     
     static protected 
-        $_primaryKeyName = 'oid',
-        $_storageCache = array();
+        $_primaryKeyName = 'oid';
     
     protected 
         $_objectSchema = array(),
-        $_saveObjectData = array();
+        $_saveObjectData = array(),
+        $_debugMode = false;
 
-    /**
-     * @static
-     * @param $storageName
-     * @return ObjectStorage
-     * @throws Exception
-     */
-    static public function create($storageName) {
-        if (!isset(self::$_storageCache[$storageName])) {
-            if (!isset(Config::$vars[$storageName]['adapter'])) {
-                throw new Exception('Неизвестное хранилище объектов '. $storageName);
-            }
-            
-            if (!isset(Config::$vars[$storageName]['connectParams'])) {
-                throw new Exception('Нет данных подключения к хранилищу '. $storageName);
-            }
-
-            if (!class_exists(Config::$vars[$storageName]['adapter'])) {
-                throw new Exception('Нет класса хранилища');
-            }
-
-            self::$_storageCache[$storageName] =
-                new Config::$vars[$storageName]['adapter'](Config::$vars[$storageName]['connectParams']);
-        }
-
-        return self::$_storageCache[$storageName];
-    }
-    
-    
     static public function getPrimaryKeyName() {
         return self::$_primaryKeyName;
     }
@@ -68,12 +40,11 @@ abstract class ObjectStorage {
         return $pp;
     }
     
-    protected function __construct($params) {
-        $this->_connect($params);
-    }
-    
     public function __destruct() {
         $this->_saveObjectData();
+        if ($this->_debugMode) {
+            var_dump($this->_getDebugInfo());
+        }
     }
     
     /**
@@ -88,7 +59,7 @@ abstract class ObjectStorage {
     }
 
 
-    abstract public function loadObject($collectionName, $id);
+    abstract public function loadObjectsById($collectionName, array $id);
     
     abstract public function initObject($collectionName);
     
@@ -100,6 +71,11 @@ abstract class ObjectStorage {
     abstract public function getIdsByCriteria($collectionName, array $criteria);
     
     abstract protected function _saveObjectData();
+    
+    /**
+     * Вернуть отладочную информацию 
+     */
+    abstract protected function _getDebugInfo();
         
     
 }

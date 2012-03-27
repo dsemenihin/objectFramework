@@ -25,14 +25,15 @@ class MysqlStorage extends ObjectStorage {
         $user = $params['user'];
         $password = $params['password'];
         $this->_dbh = new PDO($dsn, $user, $password);
+        
+        if ($this->_debugMode) {
+            $this->_dbh->exec('set profiling=1');
+        }
     }
     
-    public function loadObject($collectionName, $id) {
+    public function loadObjectsById($collectionName, array $id) {
         if ($this->_hasCollection($collectionName)) {
             try {
-                if (!is_array($id)) {
-                    $id = array($id);
-                }
                 $sql = $this->_dbh->prepare('
                     select * from `'.$collectionName.'` 
                     where '.self::$_primaryKeyName.' in ('.implode(',', $id).')
@@ -68,6 +69,9 @@ class MysqlStorage extends ObjectStorage {
     }
     
     public function _saveObjectData() {
+        if (empty($this->_saveObjectData)) {
+            return $this;
+        }
         $this->_dbh->beginTransaction();
         try {
             foreach ($this->_saveObjectData as $collectionName => $objects) {
@@ -103,7 +107,7 @@ class MysqlStorage extends ObjectStorage {
                     $sql .= implode(',', $sqlInsert);
                     $sql .= ' ON DUPLICATE KEY UPDATE';
                     $sql .= implode(',', $sqlUpdate);
-var_dump($sql);
+
                     try {
                         $result = $this->_dbh->exec($sql); 
                     } catch (PDOException $e) {
@@ -185,6 +189,14 @@ var_dump($sql);
         } else {
             throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
         }
+    }
+    
+    protected function _getDebugInfo() {
+        if (!$this->_debugMode) {
+            return false;
+        }
+        $result = $this->_dbh->query('show profiles');
+        return $result->fetchAll(PDO::FETCH_ASSOC);
     }
 }
 

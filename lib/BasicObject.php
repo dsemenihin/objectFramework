@@ -10,6 +10,7 @@ abstract class BasicObject {
     protected 
         $_objectFields = array(),
         $_storage,
+        $_cache,
         $_primaryKeyName,
         $_modifyFields = array();
     
@@ -17,25 +18,31 @@ abstract class BasicObject {
      * @static
      * @param $id
      * @param ObjectStorage $storage
+     * @param ObjectCache $cache
      * @return BasicObject
      * @throws Exception
      */
-    static public function create($id = null, ObjectStorage $storage = null) {
+    static public function create($id = null, ObjectStorage $storage = null, ObjectCache $cache = null) {
+        if (is_null($cache)) {
+            $cache = ObjectCache::create(Config::$vars['defaultCache']);
+        } 
+        
         if (is_null($storage)) {
             $storage = ObjectStorage::create(Config::$vars['defaultStorage']);
         } 
         
         $objectClass = get_called_class();
-        $objectData = !is_null($id) ? $storage->loadObject($objectClass, $id) : array();
         
         if (is_array($id)) {
+            $objectData = $storage->loadObjectsById($objectClass, $id);
             $result = array();
             foreach ($objectData as $objectItem) {
-                $result[] = new $objectClass($objectItem, $storage);
+                $result[] = new $objectClass($objectItem, $storage, $cache);
             }
             return $result;
         } else {
-            $object = new $objectClass(isset($objectData[0]) ? $objectData[0] : array(), $storage);
+            $objectData = !is_null($id) ? $storage->loadObjectsById($objectClass, array($id)) : array();
+            $object = new $objectClass(isset($objectData[0]) ? $objectData[0] : array(), $storage, $cache);
             if (is_null($id)) {
                 foreach ($storage->initObject($objectClass) as $field => $value) {
                     $object->{'set'.$field}($value);
@@ -50,8 +57,9 @@ abstract class BasicObject {
      * @param type $id
      * @param ObjectStorage $storage 
      */
-    protected function __construct($objectData, $storage) {
+    protected function __construct($objectData, ObjectStorage $storage = null, ObjectCache $cache) {
         $this->setFields($objectData);
+        $this->_cache = $cache;
         $this->_storage = $storage;
     }
     
