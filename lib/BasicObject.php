@@ -9,6 +9,7 @@ abstract class BasicObject {
     
     protected 
         $_objectFields = array(),
+        $_objectFieldsMap = array(),
         $_storage,
         $_primaryKeyName,
         $_modifyFields = array();
@@ -36,14 +37,16 @@ abstract class BasicObject {
             }
             return $result;
         } else {
-            $objectData = !is_null($id) ? $storage->loadObjectsById($objectClass, array($id)) : array();
-            $object = new $objectClass(isset($objectData[0]) ? $objectData[0] : array(), $storage);
             if (is_null($id)) {
-                foreach ($storage->initObject($objectClass) as $field => $value) {
-                    $object->{'set'.$field}($value);
-                }
-                $object->{'set'.$field}($value);
+                $objectData = $storage->initObject($objectClass);
+            } else {
+                $objectData = !is_null($id) ? $storage->loadObjectsById($objectClass, array($id)) : array();
+                $objectData = array_values($objectData);
+                $objectData = isset($objectData[0]) ? $objectData[0] : array();
             }
+            
+            $object = new $objectClass($objectData, $storage);
+            
             return $object;
         }
     }
@@ -54,8 +57,8 @@ abstract class BasicObject {
      * @param ObjectStorage $storage 
      */
     protected function __construct($objectData, ObjectStorage $storage = null) {
-        $this->setFields($objectData);
         $this->_storage = $storage;
+        $this->setFields($objectData, false);
     }
     
     /**
@@ -68,14 +71,30 @@ abstract class BasicObject {
     }
     
     /**
+     * Метод преобразования иен полей во внутреннее представление
+     * @param type $key
+     * @return type 
+     */
+    final static private function _stripKey($key) {
+        return str_replace('_', '', $key);
+    }
+    
+    public function save() {
+        $this->_storage->saveObject($this, true);
+        $this->_modifyFields = array();
+        return $this;
+    }
+
+        /**
      *
      * @param array $objectData 
      */
-    public function setFields($objectData) {
+    public function setFields($objectData, $isNewValue = true) {
         foreach ($objectData as $key => $value) {
-            $key = str_replace('_', '', $key);
-            $this->_objectFields[$key] = $value;
+            $this->{'set'.$key}($value, $isNewValue);
         }
+        
+        return $this;
     }
 
     /**
@@ -92,28 +111,37 @@ abstract class BasicObject {
         }
         
         $method = mb_strtolower($method);
+        $storageClass = get_class($this->_storage);
         if ($method == 'getid') {
-            $storageClass = get_class($this->_storage);
             return $this->_objectFields[$storageClass::getPrimaryKeyName()];
+        }
+        
+        if ($method == 'setid') {
+            $this->_objectFields[$storageClass::getPrimaryKeyName()] = $params[0];
+            return $this;
         }
         
         if (preg_match("|^get(.*)$|", $method, $poc)) {  
             $key = $poc[1];
-            if (isset($this->_objectFields[$key])) {
-                return $this->_objectFields[$key];
+            if (isset($this->_objectFieldsMap[$key])) {
+                return $this->_objectFields[$this->_objectFieldsMap[$key]];
             }
         }
         
         if (preg_match("|^set(.*)$|", $method, $poc)) {  
-            $key = $poc[1];
-            if (count($params) == 1) {
-                if (!isset($this->_objectFields[$key]) || 
-                    (isset($this->_objectFields[$key]) && $this->_objectFields[$key] != $params[0])) {
+            $innerKey = $poc[1];
+            $key = isset($this->_objectFieldsMap[$innerKey]) ? $this->_objectFieldsMap[$innerKey] : $innerKey;
+            if (!isset($this->_objectFields[$key]) || 
+                (isset($this->_objectFields[$key]) 
+                    && $this->_objectFields[$key] != $params[0])) {
+                
+                if (!isset($params[1]) || !empty($params[1])) {
                     $this->_modifyFields[$key] = true;
                 }
-                $this->_objectFields[$key] = $params[0];
-                return;
             }
+            $this->_objectFields[$key] = $params[0];
+            $this->_objectFieldsMap[self::_stripKey($key)] = $key;
+            return $this;
         }
         
         throw new Exception(get_class($this) . ': Не найден метод ' . $method);

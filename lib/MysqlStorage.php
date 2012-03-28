@@ -84,7 +84,15 @@ class MysqlStorage extends ObjectStorage {
         return $result;
     }
     
-    public function _saveObjectData() {
+    public function _saveObjectData(BasicObject $object = null) {
+        if (!empty($object)) {
+            $collectionName = get_class($object);
+            $collection = $this->_mongoDb->selectCollection($collectionName);
+            $collection->save($object->getObjectFields());
+            unset($this->_saveObjectData[$collectionName][$object->getId()]);
+            return;
+        }
+        
         $this->_dbh->beginTransaction();
         try {
             foreach ($this->_saveObjectData as $collectionName => $objects) {
@@ -101,7 +109,7 @@ class MysqlStorage extends ObjectStorage {
                     foreach ($objects as $oid => $data) {
                         $insertValue = array();
                         foreach ($this->_getObjectSchema($collectionName) as $field => $fieldData) {
-                            $field = str_replace('_', '', $field);
+                            //$field = str_replace('_', '', $field);
                             $value = isset($data[$field]) 
                                 ? '"'.$data[$field].'"' 
                                 : (is_null($fieldData['Default']) ? 'NULL' : '"'.$fieldData['Default'].'"');

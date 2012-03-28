@@ -32,6 +32,8 @@ class Config {
                     'connectParams' => array(
                         'database' => 'test',
                     ),
+                'debug'         => true,
+                'cache'   => 'Memcache',
             )
         ),
         

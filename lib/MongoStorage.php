@@ -7,54 +7,79 @@
  * To change this template use File | Settings | File Templates.
  */
 class MongoStorage extends ObjectStorage {
+    static protected 
+        $_primaryKeyName = '_id';
+    
     protected
         /**
          * @var MongoDB
          */
-        $_mongoDb;
+        $_mongoDb,
+        $_debugInfo = array();
 
     /**
-     * Çàãðóçêà äàííûõ îáúåêòîâ ïî ïåðâè÷íîìó êëþ÷ó
+     * Ð—Ð°Ð³Ñ€ÑƒÐ·ÐºÐ° Ð´Ð°Ð½Ð½Ñ‹Ñ… Ð¾Ð±ÑŠÐµÐºÑ‚Ð¾Ð² Ð¿Ð¾ Ð¿ÐµÑ€Ð²Ð¸Ñ‡Ð½Ð¾Ð¼Ñƒ ÐºÐ»ÑŽÑ‡Ñƒ
      */
     protected function _loadObjectsById($collectionName, array $id) {
-        // TODO: Implement _loadObjectsById() method.
+        $result = iterator_to_array($this->_mongoDb->$collectionName
+            ->find(array(self::getPrimaryKeyName() => array('$in' => $id))));
+        
+        $this->_debugInfo[] = 'load '.$collectionName.' by id: '. implode(', ', $id);
+        return $result;
     }
 
     /**
-     * Èíèöèàëèçàöèÿ îáúåêòà èç ñõåìû.
-     * Çíà÷åíèÿ çàïîëíÿþòñÿ äåôîëòíûìè
+     * Ð˜Ð½Ð¸Ñ†Ð¸Ð°Ð»Ð¸Ð·Ð°Ñ†Ð¸Ñ Ð¾Ð±ÑŠÐµÐºÑ‚Ð° Ð¸Ð· ÑÑ…ÐµÐ¼Ñ‹.
+     * Ð—Ð½Ð°Ñ‡ÐµÐ½Ð¸Ñ Ð·Ð°Ð¿Ð¾Ð»Ð½ÑÑŽÑ‚ÑÑ Ð´ÐµÑ„Ð¾Ð»Ñ‚Ð½Ñ‹Ð¼Ð¸
      */
     protected function _initObject($collectionName) {
         return array();
     }
 
     /**
-     * Âåðíóòü ñïèñîê id îáúåêòîâ ïî çàäàííîìó óñëîâèþ
+     * Ð’ÐµÑ€Ð½ÑƒÑ‚ÑŒ ÑÐ¿Ð¸ÑÐ¾Ðº id Ð¾Ð±ÑŠÐµÐºÑ‚Ð¾Ð² Ð¿Ð¾ Ð·Ð°Ð´Ð°Ð½Ð½Ð¾Ð¼Ñƒ ÑƒÑÐ»Ð¾Ð²Ð¸ÑŽ
      * @param type $collectionName
      * @param array $criteria
      */
     public function getIdsByCriteria($collectionName, array $criteria) {
-        // TODO: Implement getIdsByCriteria() method.
+        $result = iterator_to_array($this->_mongoDb->$collectionName
+            ->find($criteria));
+        
+        $this->_debugInfo[] = 'load '.$collectionName.' by criteria: '.  var_export($criteria, true);
+        
+        return array_keys($result);
     }
 
     /**
-     * Ðåàëèçàöèÿ ñîõðàíåíèÿ äàííûõ îáúåêòîâ.
-     * Âûçûâàåòñÿ èç äåñòðóêòîðà õðàíèëèùà
+     * Ð ÐµÐ°Ð»Ð¸Ð·Ð°Ñ†Ð¸Ñ ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¸Ñ Ð´Ð°Ð½Ð½Ñ‹Ñ… Ð¾Ð±ÑŠÐµÐºÑ‚Ð¾Ð².
+     * Ð’Ñ‹Ð·Ñ‹Ð²Ð°ÐµÑ‚ÑÑ Ð¸Ð· Ð´ÐµÑÑ‚Ñ€ÑƒÐºÑ‚Ð¾Ñ€Ð° Ñ…Ñ€Ð°Ð½Ð¸Ð»Ð¸Ñ‰Ð°
      */
-    protected function _saveObjectData() {
+    protected function _saveObjectData(BasicObject $object = null) {
+        if (!empty($object)) {
+            $collectionName = get_class($object);
+            $collection = $this->_mongoDb->selectCollection($collectionName);
+            $collection->save($object->getObjectFields());
+            unset($this->_saveObjectData[$collectionName][$object->getId()]);
+            
+            $this->_debugInfo[] = 'save '.$collectionName.': _id='.$object->getId();
+            return;
+        }
+        
         foreach ($this->_saveObjectData as $collectionName => $objects) {
-            $collection = $this->_mongoDb->selectCollection('$collectionName');
+            $collection = $this->_mongoDb->selectCollection($collectionName);
             foreach ($objects as $oid => $data) {
                 $collection->save($data);
+                
+                $this->_debugInfo[] = 'save '.$collectionName.': _id='.$oid;
             }
         }
     }
 
     /**
-     * Âåðíóòü îòëàäî÷íóþ èíôîðìàöèþ
+     * Ð’ÐµÑ€Ð½ÑƒÑ‚ÑŒ Ð¾Ñ‚Ð»Ð°Ð´Ð¾Ñ‡Ð½ÑƒÑŽ Ð¸Ð½Ñ„Ð¾Ñ€Ð¼Ð°Ñ†Ð¸ÑŽ
      */
     protected function _getDebugInfo() {
-        // TODO: Implement _getDebugInfo() method.
+        return $this->_debugInfo;
     }
 
     protected function _connect($params) {

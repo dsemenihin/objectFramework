@@ -25,7 +25,8 @@ abstract class ObjectStorage extends StorageAbstract {
         $_debugMode = false;
 
     static public function getPrimaryKeyName() {
-        return self::$_primaryKeyName;
+        $className = get_called_class();
+        return $className::$_primaryKeyName;
     }
     
     protected function __construct($storageName, $params, $debug = false) {
@@ -66,9 +67,19 @@ abstract class ObjectStorage extends StorageAbstract {
      * Сохрание в кеш измененных объектов
      * @return boolean 
      */
-    protected function _saveToCache() {
-        if (!$this->_cache || empty($this->_saveObjectData)) {
-            return false;
+    protected function _saveToCache(BasicObject $object = null) {
+        if (!$this->_cache) {
+            return;
+        }
+        
+        if (!empty($object)) {
+            $this->_cache->val($this->_getCacheKey(get_class($object), $object->getId()), $object->getObjectFields());
+            return;
+        }
+            
+        
+        if (empty($this->_saveObjectData)) {
+            return;
         }
         
         foreach ($this->_saveObjectData as $collectionName => $objects) {
@@ -83,10 +94,14 @@ abstract class ObjectStorage extends StorageAbstract {
      * @param BasicObject $object
      * @throws Exception 
      */
-    public function saveObject(BasicObject $object) {
-        $storageClass = get_called_class();
-        $this->_saveObjectData[get_class($object)][$object->{'get'.$storageClass::$_primaryKeyName}()] = 
+    public function saveObject(BasicObject $object, $flush = false) {
+        $this->_saveObjectData[get_class($object)][$object->getId()] = 
             $object->getObjectFields();
+        
+        if ($flush) {
+            $this->_saveObjectData($object);
+            $this->_saveToCache($object);
+        }
     }
     
     protected function _getCacheKey($collectionName, $id) {
@@ -117,8 +132,12 @@ abstract class ObjectStorage extends StorageAbstract {
         $notFound = array_diff($id, array_keys($cacheResult));
         $storageResult = !empty($notFound) ? $this->_loadObjectsById($collectionName, $notFound) : array();
         
-        foreach ($storageResult as $object) {
-            $this->_cache->val($this->_getCacheKey($collectionName, $object[self::$_primaryKeyName]), $object);
+        if ($this->_cache) {
+            foreach ($storageResult as $object) {
+                $this->_cache->val(
+                    $this->_getCacheKey($collectionName, $object[self::getPrimaryKeyName()]), 
+                    $object);
+            }
         }
         
         return array_merge(array_values($cacheResult), $storageResult);
@@ -126,7 +145,8 @@ abstract class ObjectStorage extends StorageAbstract {
 
     public function initObject($collectionName) {
         $initData = $this->_initObject($collectionName);
-        $initData[self::$_primaryKeyName] = self::genId();
+        $initData[self::getPrimaryKeyName()] = self::genId();
+        return $initData;
     }
 
     /**
@@ -151,7 +171,7 @@ abstract class ObjectStorage extends StorageAbstract {
      * Реализация сохранения данных объектов.
      * Вызывается из деструктора хранилища 
      */
-    abstract protected function _saveObjectData();
+    abstract protected function _saveObjectData(BasicObject $object = null);
     
     /**
      * Вернуть отладочную информацию 
