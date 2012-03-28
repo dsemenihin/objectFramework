@@ -85,9 +85,6 @@ class MysqlStorage extends ObjectStorage {
     }
     
     public function _saveObjectData() {
-        if (empty($this->_saveObjectData)) {
-            return $this;
-        }
         $this->_dbh->beginTransaction();
         try {
             foreach ($this->_saveObjectData as $collectionName => $objects) {
@@ -163,13 +160,11 @@ class MysqlStorage extends ObjectStorage {
         return $this->_objectSchema[$collectionName];
     }
     
-    public function initObject($collectionName) {
+    protected function _initObject($collectionName) {
         $initData = array();
         foreach ($this->_getObjectSchema($collectionName) as $field => $data) {
             $initData[$field] = $data['Default'];
         }
-
-        $initData[self::$_primaryKeyName] = self::genId();
 
         return $initData;
     }

@@ -42,6 +42,7 @@ abstract class BasicObject {
                 foreach ($storage->initObject($objectClass) as $field => $value) {
                     $object->{'set'.$field}($value);
                 }
+                $object->{'set'.$field}($value);
             }
             return $object;
         }

@@ -2,8 +2,9 @@
 
 class Config {
     static $vars = array(
-        'defaultStorage' => 'MysqlDb1',
-        
+        //'defaultStorage' => 'MysqlDb1',
+        'defaultStorage' => 'Mongo',
+
         'storages' => array(
             'MysqlDb1'   => array (
                 'adapter'       => 'MysqlStorage',
@@ -25,6 +26,12 @@ class Config {
                     'port'     => '11211',
                 ),
                 'debug'         => true
+            ),
+            'Mongo' => array(
+                'adapter'       => 'MongoStorage',
+                    'connectParams' => array(
+                        'database' => 'test',
+                    ),
             )
         ),
         

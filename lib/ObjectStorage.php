@@ -52,8 +52,11 @@ abstract class ObjectStorage extends StorageAbstract {
     }
     
     public function __destruct() {
-        $this->_saveObjectData();
-        $this->_saveToCache();
+        if (!empty($this->_saveObjectData)) {
+            $this->_saveObjectData();
+            $this->_saveToCache();
+        }
+
         if ($this->_debugMode) {
             var_dump($this->_getDebugInfo());
         }
@@ -121,6 +124,11 @@ abstract class ObjectStorage extends StorageAbstract {
         return array_merge(array_values($cacheResult), $storageResult);
     }
 
+    public function initObject($collectionName) {
+        $initData = $this->_initObject($collectionName);
+        $initData[self::$_primaryKeyName] = self::genId();
+    }
+
     /**
      * Загрузка данных объектов по первичному ключу 
      */
@@ -130,8 +138,8 @@ abstract class ObjectStorage extends StorageAbstract {
      * Инициализация объекта из схемы.
      * Значения заполняются дефолтными 
      */
-    abstract public function initObject($collectionName);
-    
+    abstract protected function _initObject($collectionName);
+
     /**
      * Вернуть список id объектов по заданному условию
      * @param type $collectionName
