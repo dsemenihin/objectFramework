@@ -13,7 +13,7 @@ class Config {
                     'port'     => '3360',
                     'user'     => 'root',
                     'password' => '',
-                    'database' => 'test2',
+                    'database' => 'test',
                     'charset'  => 'utf8',
                 ),
                 'debug'         => true,

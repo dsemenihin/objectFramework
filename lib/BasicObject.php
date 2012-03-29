@@ -51,6 +51,15 @@ abstract class BasicObject {
         }
     }
     
+    static public function getList($criteria = array(),  ObjectStorage $storage = null) {
+        if (is_null($storage)) {
+            $storage = ObjectStorage::create(Config::$vars['defaultStorage']);
+        } 
+        
+        return new BasicObjectList($storage, get_called_class(), $criteria);
+    }
+
+
     /**
      *
      * @param type $id
