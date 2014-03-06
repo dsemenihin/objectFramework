@@ -15,44 +15,41 @@ class MysqlStorage extends ObjectStorage {
         $_connectParams,
         /**
          * Ресурс базы
-         * @var PDOStatement 
+         * @var MysqlDriverAbstract
          */
-        $_dbh;
+        $_mysqlDriver;
     
     protected function _connect($params) {
         $this->_connectParams = $params;
-        $dsn = 'mysql:dbname='.$params['database'].';host='.$params['host'].';port='.$params['port'];
-        $user = $params['user'];
-        $password = $params['password'];
-        $this->_dbh = new PDO($dsn, $user, $password);
+
+        if (!file_exists(dirname(__FILE__) . '/' . $params['driver'] . '.php')) {
+            throw new Exception('Invalid driver for Mysql: '.$params['driver']);
+        }
+        include_once $params['driver'] . '.php';
+
+        $this->_mysqlDriver = new $params['driver']($params);
         
         if ($this->_debugMode) {
-            $this->_dbh->exec('set profiling=1');
+            $this->_mysqlDriver->query('set profiling=1');
         }
         
         if (isset($params['charset'])) {
-            $this->_dbh->exec('set names "'.$params['charset'].'";');
+            $r = $this->_mysqlDriver->query('set names "'.$params['charset'].'";');
         }
     }
     
     protected function _loadObjectsById($collectionName, array $id) {
         if ($this->_hasCollection($collectionName)) {
-            try {
-                $sql = '
-                    select * from `'.$collectionName.'` 
-                    where '.self::getPrimaryKeyName().' in ('.implode(',', $id).')
-                ';
-                $result = $this->_query($sql)->fetchAll(PDO::FETCH_ASSOC);
-                
-                if (empty($result)) {
-                    throw new Exception('Нет объекта : '.$collectionName.' с '.self::getPrimaryKeyName().' = '.$id);
-                }
-                
-               return $result;
-                
-            } catch (PDOException $e) {
-                throw new Exception('PDO error: '.$e->getMessage());
+            $sql = '
+                select * from `'.$collectionName.'`
+                where '.self::getPrimaryKeyName().' in ('.implode(',', $id).')
+            ';
+            $result = $this->_mysqlDriver->query($sql, MysqlDriverAbstract::FETCH_ASSOC);
+
+            if (empty($result)) {
+                throw new Exception('Нет объекта : '.$collectionName.' с '.self::getPrimaryKeyName().' = '.$id);
             }
+            return $result;
         } else {
             throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
         }
@@ -66,13 +63,14 @@ class MysqlStorage extends ObjectStorage {
         
         $sql = 'show tables';
         $result = false;
-        foreach ($this->_dbh->query($sql, PDO::FETCH_NUM) as $table) {
+
+        foreach ($this->_mysqlDriver->query($sql, MysqlDriverAbstract::FETCH_NUM) as $table) {
             if ($collectionName == $table[0]) {
                 $result = true;
                 break;
             }
         }
-        
+
         if ($this->_cache) {
             $this->_cache->val($cacheKey, $result);
         }
@@ -80,7 +78,7 @@ class MysqlStorage extends ObjectStorage {
         return $result;
     }
     
-    public function _saveObjectData(BasicObject $object = null) {
+    protected function _saveObjectData(BasicObject $object = null) {
         if (!is_null($object)) {
             $collectionName = get_class($object);
             if ($this->_hasCollection($collectionName)) {
@@ -88,11 +86,18 @@ class MysqlStorage extends ObjectStorage {
                 $sqlFields = array();
                 foreach ($this->_getObjectSchema($collectionName) as $field => $fieldData) {
                     if (isset($objectFields[$field])) {
-                        $sqlFields[] = '`'.$field.'`="'.$objectFields[$field].'"';
+                        $value = $objectFields[$field];
+                        if (strpos($fieldData['Type'], 'int') !== false) {
+                            $value = $this->_mysqlDriver->escape($value, MysqlDriverAbstract::ESCAPE_INT);
+                        } else {
+                            $value = $this->_mysqlDriver->escape($value);
+                        }
+
+                        $sqlFields[] = '`' . $field . '`=' . $value;
                     }
                 } 
                 $sql = 'REPLACE '.$collectionName.' SET '. implode(', ', $sqlFields);
-                $this->_query($sql);
+                $this->_mysqlDriver->query($sql);
             } else {
                 throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
             }
@@ -101,7 +106,7 @@ class MysqlStorage extends ObjectStorage {
             return;
         }
         
-        $this->_dbh->beginTransaction();
+        $this->_mysqlDriver->beginTransaction();
         try {
             foreach ($this->_saveObjectData as $collectionName => $objects) {
                 if (empty($objects)) {
@@ -137,14 +142,14 @@ class MysqlStorage extends ObjectStorage {
                     $sql .= ' ON DUPLICATE KEY UPDATE';
                     $sql .= implode(',', $sqlUpdate);
 
-                    $this->_query($sql);
+                    $this->_mysqlDriver->query($sql);
                 } else {
                     throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
                 }
             }
-            $this->_dbh->commit();
+            $this->_mysqlDriver->commit();
         } catch (Exception $e) {
-            $this->_dbh->rollback();
+            $this->_mysqlDriver->rollback();
             throw $e;
         }
     }
@@ -157,7 +162,7 @@ class MysqlStorage extends ObjectStorage {
         if (!isset($this->_objectSchema[$collectionName])) {
             $sql = 'desc '.$collectionName;
             $this->_objectSchema[$collectionName] = array();
-            foreach ($this->_dbh->query($sql, PDO::FETCH_ASSOC) as $field) {
+            foreach ($this->_mysqlDriver->query($sql, MysqlDriverAbstract::FETCH_ASSOC) as $field) {
                 $this->_objectSchema[$collectionName][$field['Field']] = $field;
             }
         }
@@ -180,29 +185,25 @@ class MysqlStorage extends ObjectStorage {
     
     public function getIdsByCriteria($collectionName, array $criteria) {
         if ($this->_hasCollection($collectionName)) {
-            try {
-                if (!empty($criteria)) {
-                    $where = array();
-                    $schema = $this->_getObjectSchema($collectionName);
-                    foreach ($criteria as $field => $value) {
-                        if (!isset($schema[$field])) {
-                            continue;
-                        }
-                        $where[] = '`'.$field.'`="'.$value.'"';
+            if (!empty($criteria)) {
+                $where = array();
+                $schema = $this->_getObjectSchema($collectionName);
+                foreach ($criteria as $field => $value) {
+                    if (!isset($schema[$field])) {
+                        continue;
                     }
-                    
-                    $where = implode(' AND ', $where);
-                } else {
-                    $where = '1';
+                    $where[] = '`'.$field.'`="'.$value.'"';
                 }
-                
-                $sql = 'select `'.self::getPrimaryKeyName().'` from `'.$collectionName.'` where ' . $where;
-                
-                return $this->_query($sql)->fetchAll(PDO::FETCH_COLUMN, 0);
-                
-            } catch (PDOException $e) {
-                throw new Exception('PDO error: '.$e->getMessage());
+
+                $where = implode(' AND ', $where);
+            } else {
+                $where = '1';
             }
+
+            $sql = 'select `'.self::getPrimaryKeyName().'` from `'.$collectionName.'` where ' . $where;
+            $res = $this->_mysqlDriver->query($sql, MysqlDriverAbstract::FETCH_COLUMN);
+            return $res;
+                
         } else {
             throw new Exception('Нет таблицы '.$this->_connectParams['database'].'.'.$collectionName);
         }
@@ -213,23 +214,7 @@ class MysqlStorage extends ObjectStorage {
         if (!$this->_debugMode) {
             return false;
         }
-        $result = $this->_dbh->query('show profiles');
-        return $result->fetchAll(PDO::FETCH_ASSOC);
-    }
-    
-    
-    protected function _query($sql) {
-        try {
-            $result = $this->_dbh->query($sql); 
-        } catch (PDOException $e) {
-            throw new Exception('PDO error: '.$e->getMessage());
-        }
-
-        if ($this->_dbh->errorCode() !== PDO::ERR_NONE) {
-            $info = $this->_dbh->errorInfo();
-            throw new Exception('Mysql error: '.$info[2]);
-        }
-        
+        $result = $this->_mysqlDriver->query('show profiles', MysqlDriverAbstract::FETCH_ASSOC);
         return $result;
     }
 }

@@ -95,9 +95,7 @@ abstract class ObjectStorage extends StorageAbstract {
      * @throws Exception 
      */
     public function saveObject(BasicObject $object, $flush = false) {
-        $this->_saveObjectData[get_class($object)][$object->getId()] = 
-            $object->getObjectFields();
-        
+        $this->_saveObjectData[get_class($object)][$object->getId()] = $object->getObjectFields();
         if ($flush) {
             $this->_saveObjectData($object);
             $this->_saveToCache($object);
@@ -166,7 +164,7 @@ abstract class ObjectStorage extends StorageAbstract {
      * @param array $criteria 
      */
     abstract public function getIdsByCriteria($collectionName, array $criteria);
-    
+
     /**
      * Реализация сохранения данных объектов.
      * Вызывается из деструктора хранилища 

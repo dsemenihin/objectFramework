@@ -2,21 +2,22 @@
 
 class Config {
     static $vars = array(
-        //'defaultStorage' => 'MysqlDb1',
-        'defaultStorage' => 'Mongo',
+        'defaultStorage' => 'MysqlDb1',
+        //'defaultStorage' => 'Mongo',
 
         'storages' => array(
             'MysqlDb1'   => array (
                 'adapter'       => 'MysqlStorage',
                 'connectParams' => array(
+                    'driver'   => 'MysqliMysqlDriver',
                     'host'     => 'localhost',
-                    'port'     => '3360',
+                    'port'     => 3360,
                     'user'     => 'root',
                     'password' => '',
                     'database' => 'test',
                     'charset'  => 'utf8',
                 ),
-                'debug'         => true,
+                'debug'         => false,
                 'cache'   => 'Memcache',
             ),
             'Memcache' => array(
